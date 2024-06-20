@@ -34,22 +34,57 @@ def build_tree(points, depth=0):
         right_child=build_tree(points[median+1:], depth+1)
     )
 
-
-mp = points = [(2, 3), (5, 4), (9, 6), (4, 7), (8, 1), (7, 2)]
-point_1 = mp[0]
-point_2 = mp[1]
-
-mz = zip(point_1, point_2)
-
-
-
+# Get the Euclidean distance squared between the two points.  Distance squared is
+# good enough since we're just comparing relative differences and is a little quicker
+# to calculate
 def distance_squared(point_1, point_2):
     grouped_coords = zip(point_1, point_2) # Results in (X, X), (Y, Y)
-    print(sum((x - y)**2 for x, y in grouped_coords))
+    sum((a1 - a2)**2 for a1, a2 in grouped_coords) # Results in (X1-X2)**2 + (Y1-Y2)**2
     return 
 
 
+def nearest_neighbor(kd_tree, target, depth=0, best=None):
+    # Base case
+    if kd_tree is None:
+        return best
+    
+    k = len(target)
+    axis = depth % k
+    next_best = None
+    next_branch = None
+    dist_to_target = distance_squared(target, kd_tree.point) # Distance to the target from the current point
+    dist_target_to_best = distance_squared(target, best.point)
+
+    # If we don't yet have a 'best' point, or if the distance between our current point and the target is 
+    # shorter than our best currently computed distance
+    if best is None or dist_to_target < dist_target_to_best:
+        next_best = kd_tree # Set the next best equal to the current node
+    else:
+        next_best = best
+
+    # Pick which branch of the tree we should traverse by comparing the coordiate values at the given axis
+    # This leverages the structure we generated earlier and allows us to efficiently navigate the tree
+    if target[axis] < kd_tree.point[axis]:
+        next_branch = kd_tree.left_child
+        other_branch = kd_tree.right_child
+    else:
+        next_branch = kd_tree.right_child
+        other_branch = kd_tree.left_child
+    
+    # Now, call the function recursively until we find the target
+    next_best = nearest_neighbor(next_branch, target, depth+1, next_best)
+
+    dist_next_best_to_target = distance_squared(target, next_best.point) # 2D distance 
+    axis_target_dist = target[axis] - kd_tree.point[axis] ** 2 # 1D distance
+
+    # If the 2D distance from our current best point is greater than the 1D distance from our current point
+    # to the target (which will happen often), we need to check the alternate branch to make sure there isn't a
+    # better candidate point hiding in there.
+    if dist_next_best_to_target > axis_target_dist:
+        next_best = nearest_neighbor(other_branch, target, depth+1, next_best)
+    
+    return next_best
 
 
-
+points = [(2, 3), (5, 4), (9, 6), (4, 7), (8, 1), (7, 2)]
 #kd_tree = build_tree(mp)
