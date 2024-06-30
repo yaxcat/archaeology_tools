@@ -34,33 +34,61 @@ def build_tree(points, depth=0):
         right_child=build_tree(points[median+1:], depth+1)
     )
 
+
+def inOrderTraversal(rootNode):
+    if not rootNode:
+        return
+    inOrderTraversal(rootNode.left_child)
+    print(rootNode.point)
+    inOrderTraversal(rootNode.right_child)
+
+
+
 # Get the Euclidean distance squared between the two points.  Distance squared is
 # good enough since we're just comparing relative differences and is a little quicker
 # to calculate
 def distance_squared(point_1, point_2):
     grouped_coords = zip(point_1, point_2) # Results in (X, X), (Y, Y)
-    sum((a1 - a2)**2 for a1, a2 in grouped_coords) # Results in (X1-X2)**2 + (Y1-Y2)**2
-    return 
+    dist = sum((a1 - a2)**2 for a1, a2 in grouped_coords) # Results in (X1-X2)**2 + (Y1-Y2)**2
+    return  dist
 
 
-def nearest_neighbor(kd_tree, target, depth=0, best=None):
+def nearest_neighbor(kd_tree, target, depth=0, input_best=None):
     # Base case
     if kd_tree is None:
-        return best
+        print("Base case hit")
+        return input_best
     
     k = len(target)
     axis = depth % k
-    next_best = None
+    curr_best = None
     next_branch = None
     dist_to_target = distance_squared(target, kd_tree.point) # Distance to the target from the current point
-    dist_target_to_best = distance_squared(target, best.point)
+    
+    
+    if not input_best:
+        print(depth, '-', kd_tree.point, input_best)
+    else:
+        print(depth, '-', kd_tree.point, input_best.point)
+
+
+    if input_best:
+        dist_target_to_best = distance_squared(target, input_best.point)
+        print("   ", dist_target_to_best)
+    else:
+        dist_target_to_best = 9999999999
+    
+    print('    Target to Best:', dist_target_to_best)
 
     # If we don't yet have a 'best' point, or if the distance between our current point and the target is 
-    # shorter than our best currently computed distance
-    if best is None or dist_to_target < dist_target_to_best:
-        next_best = kd_tree # Set the next best equal to the current node
+    # shorter than our best currently computed distance, we've found a new and better nearest neighbor
+    if input_best is None or dist_to_target < dist_target_to_best:
+        curr_best = kd_tree # Set the current best equal to the current node
+        print('   ', curr_best.point)
+    # If not, just set the current best equal to the input best since what we started with is still
+    # the best we've got
     else:
-        next_best = best
+        curr_best = input_best
 
     # Pick which branch of the tree we should traverse by comparing the coordiate values at the given axis
     # This leverages the structure we generated earlier and allows us to efficiently navigate the tree
@@ -71,20 +99,36 @@ def nearest_neighbor(kd_tree, target, depth=0, best=None):
         next_branch = kd_tree.right_child
         other_branch = kd_tree.left_child
     
-    # Now, call the function recursively until we find the target
-    next_best = nearest_neighbor(next_branch, target, depth+1, next_best)
+    # Now, call the function recursively to explore the selected branch
+    curr_best = nearest_neighbor(next_branch, target, depth+1, curr_best)
 
-    dist_next_best_to_target = distance_squared(target, next_best.point) # 2D distance 
+    dist_curr_best_to_target = distance_squared(target, curr_best.point) # 2D distance 
     axis_target_dist = target[axis] - kd_tree.point[axis] ** 2 # 1D distance
 
     # If the 2D distance from our current best point is greater than the 1D distance from our current point
     # to the target (which will happen often), we need to check the alternate branch to make sure there isn't a
     # better candidate point hiding in there.
-    if dist_next_best_to_target > axis_target_dist:
-        next_best = nearest_neighbor(other_branch, target, depth+1, next_best)
+    if dist_curr_best_to_target > axis_target_dist:
+        curr_best = nearest_neighbor(other_branch, target, depth+1, curr_best)
     
-    return next_best
+    return curr_best
+
+
+
+
+
+
+
+
 
 
 points = [(2, 3), (5, 4), (9, 6), (4, 7), (8, 1), (7, 2)]
-#kd_tree = build_tree(mp)
+kd_tree = build_tree(points)
+
+print("")
+print(inOrderTraversal(kd_tree))
+print("")
+
+r = nearest_neighbor2(kd_tree, (2,3))
+
+print(r.point)
