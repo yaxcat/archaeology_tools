@@ -1,4 +1,13 @@
 import arcpy
+import kd_tree
+
+def inOrderTraversal(rootNode):
+    if not rootNode:
+        return
+    inOrderTraversal(rootNode.left_child)
+    arcpy.AddMessage(str(rootNode.id) + " - " + str(rootNode.point))
+    inOrderTraversal(rootNode.right_child)
+
 
 def pts_to_kd_tree(points, fields):
     desc = arcpy.Describe(points)
@@ -11,9 +20,12 @@ def pts_to_kd_tree(points, fields):
     pt_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
     with arcpy.da.SearchCursor(pt_lyr, fields) as cur:
         for pt in cur:
-            s = str(pt[0]) + " - " + "(" + str(pt[1]) + ", " + str(pt[2]) + ")"
-            arcpy.AddMessage(s)
+            id = pt[0]
+            coords = (pt[1], pt[2])
+            point_list.append([id, coords])
+    tree = kd_tree.build_tree(point_list)
     
+    return tree
 
 
 
@@ -25,4 +37,6 @@ if __name__ == "__main__":
     y = arcpy.GetParameterAsText(3)
     fields = [id, x, y]
 
-    pts_to_kd_tree(points, fields)
+    tree = pts_to_kd_tree(points, fields)
+
+    inOrderTraversal(tree)
