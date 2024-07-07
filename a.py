@@ -8,26 +8,67 @@ def inOrderTraversal(rootNode):
     arcpy.AddMessage(str(rootNode.id) + " - " + str(rootNode.point))
     inOrderTraversal(rootNode.right_child)
 
-
-def pts_to_kd_tree(points, fields):
-    desc = arcpy.Describe(points)
-    if desc.shapeType not in ('Point', 'MultiPoint'):
-        arcpy.AddWarning("The process was aborted because the input data were not points.  Please seclect a point dataset to use with this tool.")
-        return
-    
-    
+def get_pts(point_lyr, fields):
     point_list = []
-    pt_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
-    with arcpy.da.SearchCursor(pt_lyr, fields) as cur:
+    with arcpy.da.SearchCursor(point_lyr, fields) as cur:
         for pt in cur:
             id = pt[0]
             coords = (pt[1], pt[2])
             point_list.append([id, coords])
+    return point_list
+
+
+def pts_to_kd_tree(point_lyr, fields):
+    desc = arcpy.Describe(points)
+    if desc.shapeType not in ('Point', 'MultiPoint'):
+        arcpy.AddWarning("The process was aborted because the input data were not points.  Please seclect a point dataset to use with this tool.")
+        return
+    point_list = get_pts(point_lyr, fields)
     tree = kd_tree.build_tree(point_list)
     
     return tree
 
+def get_perimeter_pts(point_lyr, fields):
+    pt_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
+    bounding_poly = arcpy.MinimumBoundingGeometry_management(pt_lyr, 'Prc_01_bounding_poly', 'CONVEX_HULL')
+    selection = arcpy.SelectLayerByLocation_management(point_lyr, 'BOUNDARY_TOUCHES', bounding_poly)
+    arcpy.ExportFeatures_conversion(selection, 'Prc_02_perimeter_points')
 
+    perimeter_pts = get_pts(selection, fields)
+    return perimeter_pts
+
+# Maps two non-negative integers into a single non-negative integer.  Used to keep track of point
+# pairs and prevent duplication of work
+def cantor_pairing(oid1, oid2):
+    if oid1 == oid2:
+        arcpy.AddWarning("Two or more points have the same ID.  Point IDs must be unique to use this tool.")
+        return
+    # Make sure the pairwise function always consumes the IDs in the same order so that return value is
+    # consistent.  For example (3,5) and (5,3) should both return 41.
+    if oid1 < oid2:
+        k1 = oid1
+        k2 = oid2
+    else:
+        k1 = oid2
+        k2 = oid1
+    pair_id = (k1 + k2) * (k1 + k2 + 1)/2 + k2
+    return int(pair_id)
+
+def gen_transects(perimeter_pts):
+    pair_ids = set()
+    transects = {}
+    num_pts = len(perimeter_pts)
+    for pt_1 in range(0, num_pts):
+        for pt_2 in range(pt_1+1, num_pts):
+            oid1 = perimeter_pts[pt_1][0]
+            oid2 = perimeter_pts[pt_2][0]
+            pair_id = cantor_pairing(oid1, oid2)
+            arcpy.AddMessage(str(oid1) + ", " + str(oid2) + " - " + str(pair_id))
+            if pair_id not in pair_ids:
+                pair_ids.add(pair_id)
+                transects[pair_id] = [perimeter_pts[pt_1], perimeter_pts[pt_2]]
+
+    return transects
 
 if __name__ == "__main__":
     points = arcpy.GetParameterAsText(0)
@@ -37,6 +78,15 @@ if __name__ == "__main__":
     y = arcpy.GetParameterAsText(3)
     fields = [id, x, y]
 
-    tree = pts_to_kd_tree(points, fields)
+    point_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
 
-    inOrderTraversal(tree)
+    tree = pts_to_kd_tree(point_lyr, fields)
+    perimeter_pts = get_perimeter_pts(point_lyr, fields)
+    transects = gen_transects(perimeter_pts)
+
+    #inOrderTraversal(tree)
+
+    arcpy.AddMessage(len(transects))
+
+    #for transect in transects:
+    #    arcpy.AddMessage(str(transect))
