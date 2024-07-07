@@ -86,7 +86,9 @@ if __name__ == "__main__":
 
     #inOrderTraversal(tree)
 
-    arcpy.AddMessage(len(transects))
+    arcpy.AddMessage(len(transects)) 
+
+    #
 
     #for transect in transects:
     #    arcpy.AddMessage(str(transect))

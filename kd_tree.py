@@ -40,7 +40,7 @@ def build_tree(points, depth=0):
         right_child=build_tree(points[median+1:], depth+1)
     )
 
-
+#
 
 
 # Get the Euclidean distance squared between the two points.  Distance squared is
