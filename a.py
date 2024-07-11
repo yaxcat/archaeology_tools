@@ -1,4 +1,5 @@
 import arcpy
+import math
 import kd_tree
 
 def inOrderTraversal(rootNode):
@@ -70,6 +71,33 @@ def gen_transects(perimeter_pts):
 
     return transects
 
+# Generates a list representing the station points along the transect line
+def gen_station_points(start_pt, end_pt, spacing):
+    x1 = start_pt[0]
+    x2 = end_pt[0]
+    y1 = start_pt[1]
+    y2 = end_pt[1]
+
+    line_len = math.sqrt((x2-x1)**2 + (y2-y1)**2) 
+    station_points = [start_pt]
+    inc = spacing
+
+    while inc < line_len:
+        v = (x2-x1, y2-y1) # direction of the vector
+        vlen = math.sqrt((x2-x1)**2 + (y2-y1)**2) # length
+        norm = ((x2-x1)/vlen, (y2-y1)/vlen) # Compute the fractional X & Y
+        station = (round(x1 + spacing * norm[0], 2), round(y1 + spacing * norm[1], 2)) # Compute the station point
+        station_points.append(station)
+        x1, y1 = station[0], station[1] # Update the starting point to move along the line
+        inc += spacing
+    station_points.append(end_pt)
+
+    return station_points
+
+pts = gen_station_points((0,0), (7,7), 1)
+
+ 
+"""
 if __name__ == "__main__":
     points = arcpy.GetParameterAsText(0)
     arcpy.AddMessage(points)
@@ -92,3 +120,4 @@ if __name__ == "__main__":
 
     #for transect in transects:
     #    arcpy.AddMessage(str(transect))
+"""
