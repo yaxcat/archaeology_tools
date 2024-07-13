@@ -64,7 +64,7 @@ def gen_transects(perimeter_pts):
             oid1 = perimeter_pts[pt_1][0]
             oid2 = perimeter_pts[pt_2][0]
             pair_id = cantor_pairing(oid1, oid2)
-            arcpy.AddMessage(str(oid1) + ", " + str(oid2) + " - " + str(pair_id))
+            #arcpy.AddMessage(str(oid1) + ", " + str(oid2) + " - " + str(pair_id))
             if pair_id not in pair_ids:
                 pair_ids.add(pair_id)
                 transects[pair_id] = [perimeter_pts[pt_1], perimeter_pts[pt_2]]
@@ -78,13 +78,12 @@ def gen_station_points(start_pt, end_pt, spacing):
     y1 = start_pt[1]
     y2 = end_pt[1]
 
-    line_len = math.sqrt((x2-x1)**2 + (y2-y1)**2) 
+    line_len = math.sqrt((x2-x1)**2 + (y2-y1)**2) # Overall line length
     station_points = [start_pt]
     inc = spacing
 
     while inc < line_len:
-        v = (x2-x1, y2-y1) # direction of the vector
-        vlen = math.sqrt((x2-x1)**2 + (y2-y1)**2) # length
+        vlen = math.sqrt((x2-x1)**2 + (y2-y1)**2) # segment length
         norm = ((x2-x1)/vlen, (y2-y1)/vlen) # Compute the fractional X & Y
         station = (round(x1 + spacing * norm[0], 2), round(y1 + spacing * norm[1], 2)) # Compute the station point
         station_points.append(station)
@@ -94,16 +93,45 @@ def gen_station_points(start_pt, end_pt, spacing):
 
     return station_points
 
-pts = gen_station_points((0,0), (7,7), 1)
+def get_distance(point_a, point_b):
+    x1 = point_a[0]
+    x2 = point_b[0]
+    y1 = point_a[1]
+    y2 = point_b[1]
+    line_len = math.sqrt((x2-x1)**2 + (y2-y1)**2)
+
+    return line_len
+
+def group_nodes_by_transect(tree, transects, tolerance):
+    groups = set()
+    point_groups = {}
+    for transect in transects:
+        id = transect
+        t_begin = transects[transect][0][1]
+        t_end = transects[transect][1][1]
+        #arcpy.AddMessage(str(id) + " " +  str(t_begin) + " " +  str(t_end))
+
+        t_stations = gen_station_points(t_begin, t_end, station_point_density)
+        for station in t_stations:
+            nn = kd_tree.nearest_neighbor(tree, station)
+            if get_distance(station, nn.point) < tolerance:
+                if id not in groups:
+                    point_groups[id] = [nn.point]
+                    groups.add(id)
+                else:
+                    point_groups[id].append(nn.point)
+    return point_groups
 
  
-"""
+
 if __name__ == "__main__":
     points = arcpy.GetParameterAsText(0)
     arcpy.AddMessage(points)
     id = arcpy.GetParameterAsText(1)
     x = arcpy.GetParameterAsText(2)
     y = arcpy.GetParameterAsText(3)
+    station_point_density = int(arcpy.GetParameterAsText(4))
+    tolerance = float(arcpy.GetParameterAsText(5))
     fields = [id, x, y]
 
     point_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
@@ -111,13 +139,7 @@ if __name__ == "__main__":
     tree = pts_to_kd_tree(point_lyr, fields)
     perimeter_pts = get_perimeter_pts(point_lyr, fields)
     transects = gen_transects(perimeter_pts)
+    grouped_nodes = group_nodes_by_transect(tree, transects, 1)
 
-    #inOrderTraversal(tree)
-
-    arcpy.AddMessage(len(transects)) 
-
-    #
-
-    #for transect in transects:
-    #    arcpy.AddMessage(str(transect))
-"""
+    for i in grouped_nodes:
+        arcpy.AddMessage(grouped_nodes[i])
