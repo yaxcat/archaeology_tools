@@ -105,6 +105,7 @@ def get_distance(point_a, point_b):
 def group_nodes_by_transect(tree, transects, tolerance):
     groups = set()
     point_groups = {}
+    station_groups = {}
     for transect in transects:
         id = transect
         t_begin = transects[transect][0][1]
@@ -112,6 +113,7 @@ def group_nodes_by_transect(tree, transects, tolerance):
         #arcpy.AddMessage(str(id) + " " +  str(t_begin) + " " +  str(t_end))
 
         t_stations = gen_station_points(t_begin, t_end, station_point_density)
+        station_groups[id] = t_stations
         for station in t_stations:
             nn = kd_tree.nearest_neighbor(tree, station)
             if get_distance(station, nn.point) < tolerance:
@@ -119,10 +121,30 @@ def group_nodes_by_transect(tree, transects, tolerance):
                     point_groups[id] = [nn.point]
                     groups.add(id)
                 else:
-                    point_groups[id].append(nn.point)
-    return point_groups
+                    if point_groups[id][-1] != nn.point: # Possible to accidentally grab the same point more than once depending on the station density
+                        point_groups[id].append(nn.point)
+    return station_groups, point_groups
 
- 
+def write_geometry(point_lyr, point_groups, type):
+    wp = r"C:\Test"
+    spatial_ref = arcpy.Describe(point_lyr).spatialReference # Use the same CRS as the input points
+    if type == 'neighbors':
+        out_fc = arcpy.CreateFeatureclass_management(wp, 'Res_01_point_groups', "POINT", spatial_reference=spatial_ref)
+    elif type == 'stations':
+        out_fc = arcpy.CreateFeatureclass_management(wp, 'Prc_03_station_groups', "POINT", spatial_reference=spatial_ref)
+    else:
+        arcpy.AddWarning("Incorrect type passed to write geometry function.  Please use one of the defined types.")
+        return        
+    arcpy.AddField_management(out_fc, "Group", "LONG")
+
+    with arcpy.da.InsertCursor(out_fc, ["SHAPE@XY", "Group"]) as cursor:
+        for group in point_groups:
+            group_id = group
+            points = point_groups[group]
+            group_size = len(points)
+            if group_size > 1:
+                for xy in points:
+                    cursor.insertRow([xy, group_id])
 
 if __name__ == "__main__":
     points = arcpy.GetParameterAsText(0)
@@ -139,7 +161,10 @@ if __name__ == "__main__":
     tree = pts_to_kd_tree(point_lyr, fields)
     perimeter_pts = get_perimeter_pts(point_lyr, fields)
     transects = gen_transects(perimeter_pts)
-    grouped_nodes = group_nodes_by_transect(tree, transects, 1)
+    
+    station_groups, node_groups = group_nodes_by_transect(tree, transects, 1)
+    write_geometry(point_lyr, station_groups, 'stations')
+    write_geometry(point_lyr, node_groups, 'neighbors')
 
-    for i in grouped_nodes:
-        arcpy.AddMessage(grouped_nodes[i])
+    # for i in grouped_nodes:
+    #     arcpy.AddMessage(grouped_nodes[i])
