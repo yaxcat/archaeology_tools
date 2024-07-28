@@ -24,7 +24,7 @@ def build_tree(points, depth=0):
 
     # Sort the points list by the coordinate at the given axis
     # TimSort TC O(n log n)
-    points.sort(key=lambda point: point[axis]) 
+    points.sort(key=lambda point: point[1][axis]) 
 
     median = len(points) // 2  # This is where we will split the points list
 
@@ -92,21 +92,26 @@ def nearest_neighbor(kd_tree, target, depth=0, best=None):
     return next_best
 
 
-
-
-
-
-
-
-
-
-# points = [(2, 3), (5, 4), (9, 6), (4, 7), (8, 1), (7, 2)]
+# points = [
+#     [1, (2.03, 0.95)],
+#     [11, (4.02, 0.88)],
+#     [18, (4.01, 2.92)],
+#     [17, (4.03, 3.9)],
+#     [12, (6.08, 0.86)],
+#     [16, (4.04, 4.9)],
+#     [19, (3.98, 1.89)],
+#     [20, (4.04, 5.91)],
+#     [24, (2.05, 7.85)],
+#     [21, (4.07, 6.95)],
+#     [22, (4.07, 7.98)],
+#     [23, (6.12, 7.81)]
+# ]
 # kd_tree = build_tree(points)
 
-# print("")
-# print(inOrderTraversal(kd_tree))
-# print("")
+# # print("")
+# # #print(inOrderTraversal(kd_tree))
+# # print("")
 
-# r = nearest_neighbor(kd_tree, (2, 3))
+# r = nearest_neighbor(kd_tree, (4.06, 5.88))
 
-# #print(r.point)
+# print(r.point)
