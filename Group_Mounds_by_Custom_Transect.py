@@ -31,48 +31,60 @@ def pts_to_kd_tree(point_lyr, fields):
     return tree
 
 
-def get_perimeter_pts(point_lyr, fields, wsp):
-    pt_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
-    bounding_poly = arcpy.MinimumBoundingGeometry_management(pt_lyr, wsp + 'Prc_01_bounding_poly', 'CONVEX_HULL')
-    selection = arcpy.SelectLayerByLocation_management(point_lyr, 'BOUNDARY_TOUCHES', bounding_poly)
-    arcpy.ExportFeatures_conversion(selection, wsp + 'Prc_02_perimeter_points')
+# def get_perimeter_pts(point_lyr, fields, wsp):
+#     pt_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
+#     bounding_poly = arcpy.MinimumBoundingGeometry_management(pt_lyr, wsp + 'Prc_01_bounding_poly', 'CONVEX_HULL')
+#     selection = arcpy.SelectLayerByLocation_management(point_lyr, 'BOUNDARY_TOUCHES', bounding_poly)
+#     arcpy.ExportFeatures_conversion(selection, wsp + 'Prc_02_perimeter_points')
 
-    perimeter_pts = get_pts(selection, fields)
+#     perimeter_pts = get_pts(selection, fields)
+#     return perimeter_pts
+
+def get_perimeter_pts(perimeter_points, perim_fields):
+    perimeter_pts = get_pts(perimeter_points, perim_fields)
     return perimeter_pts
 
 
-# Maps two non-negative integers into a single non-negative integer.  Used to keep track of point
-# pairs and prevent duplication of work
-def cantor_pairing(oid1, oid2):
-    if oid1 == oid2:
-        arcpy.AddWarning("Two or more points have the same ID.  Point IDs must be unique to use this tool.")
-        return
-    # Make sure the pairwise function always consumes the IDs in the same order so that return value is
-    # consistent.  For example (3,5) and (5,3) should both return 41.
-    if oid1 < oid2:
-        k1 = oid1
-        k2 = oid2
-    else:
-        k1 = oid2
-        k2 = oid1
-    pair_id = (k1 + k2) * (k1 + k2 + 1)/2 + k2
-    return int(pair_id)
+# # Maps two non-negative integers into a single non-negative integer.  Used to keep track of point
+# # pairs and prevent duplication of work
+# def cantor_pairing(oid1, oid2):
+#     if oid1 == oid2:
+#         arcpy.AddWarning("Two or more points have the same ID.  Point IDs must be unique to use this tool.")
+#         return
+#     # Make sure the pairwise function always consumes the IDs in the same order so that return value is
+#     # consistent.  For example (3,5) and (5,3) should both return 41.
+#     if oid1 < oid2:
+#         k1 = oid1
+#         k2 = oid2
+#     else:
+#         k1 = oid2
+#         k2 = oid1
+#     pair_id = (k1 + k2) * (k1 + k2 + 1)/2 + k2
+#     return int(pair_id)
 
 
 def gen_transects(perimeter_pts):
     pair_ids = set()
     transects = {}
     num_pts = len(perimeter_pts)
-    transect_num = 0 # Cantor can produce very large integers, so use our key starting at 0
-    for pt_1 in range(0, num_pts):
-        for pt_2 in range(pt_1+1, num_pts):
-            oid1 = perimeter_pts[pt_1][0]
-            oid2 = perimeter_pts[pt_2][0]
-            pair_id = cantor_pairing(oid1, oid2)
-            if pair_id not in pair_ids:
-                pair_ids.add(pair_id)
-                transects[transect_num] = [perimeter_pts[pt_1], perimeter_pts[pt_2]]
-            transect_num += 1
+    count = 0
+    for pt in range(0, num_pts):
+        pair_id = perimeter_pts[pt][0]
+        if pair_id not in pair_ids:
+            pair_ids.add(pair_id)
+            transects[pair_id] = [perimeter_pts[pt]]
+        else:
+            transects[pair_id].append(perimeter_pts[pt])
+
+    # for pt_1 in range(0, num_pts):
+    #     for pt_2 in range(pt_1+1, num_pts):
+    #         oid1 = perimeter_pts[pt_1][0]
+    #         oid2 = perimeter_pts[pt_2][0]
+    #         pair_id = cantor_pairing(oid1, oid2)
+    #         if pair_id not in pair_ids:
+    #             pair_ids.add(pair_id)
+    #             transects[transect_num] = [perimeter_pts[pt_1], perimeter_pts[pt_2]]
+    #         transect_num += 1
     return transects
 
 
@@ -113,23 +125,29 @@ def group_nodes_by_transect(tree, transects, tolerance):
     station_groups = {}
     grp_id = 0
     for transect in transects:
+        arcpy.AddMessage(transect)
         id = transect
         t_begin = transects[transect][0][1]
         t_end = transects[transect][1][1]
         t_stations = gen_station_points(t_begin, t_end, station_point_density)
+        arcpy.AddMessage(t_stations)
         station_groups[id] = t_stations
         for station in t_stations:
             nn = kd_tree.nearest_neighbor(tree, station)
             dist = get_distance(station, nn.point)
+            #arcpy.AddMessage("---" + str(nn.point))
+            #arcpy.AddMessage("-----" + str(dist))
             if dist < tolerance:
+                #arcpy.AddMessage("T")
+                arcpy.AddMessage("---" + str(nn.point))
                 if id not in groups:
                     point_groups[id] = [nn.point]
                     groups.add(id)
                 else:
-                    if point_groups[id][-1] != nn.point: # Possible to accidentally grab the same point more than once depending on the station density
-                        point_groups[id].append(nn.point)
+                    #if point_groups[id][-1] != nn.point: # Possible to accidentally grab the same point more than once depending on the station density
+                    point_groups[id].append(nn.point)
+    arcpy.AddMessage(point_groups)
     return station_groups, point_groups
-
 
 def write_geometry(point_lyr, point_groups, type, wsp):
     #aprx = arcpy.mp.ArcGISProject("CURRENT")
@@ -173,16 +191,25 @@ def write_geometry(point_lyr, point_groups, type, wsp):
 if __name__ == "__main__":
     points = arcpy.GetParameterAsText(0)
     id = arcpy.GetParameterAsText(1)
-    station_point_density = int(arcpy.GetParameterAsText(2))
-    tolerance = float(arcpy.GetParameterAsText(3))
-    wsp = arcpy.GetParameterAsText(4) + "\\"
+    perim_points = arcpy.GetParameterAsText(2)
+    station_point_density = int(arcpy.GetParameterAsText(3))
+    tolerance = float(arcpy.GetParameterAsText(4))
+    wsp = arcpy.GetParameterAsText(5) + "\\"
     fields = ["SHAPE@XY", id]
+    perim_fields = ["SHAPE@XY", "Pair_ID"]
 
     point_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
+    perim_lyr = arcpy.MakeFeatureLayer_management(perim_points, 'perim_layer')
 
     tree = pts_to_kd_tree(point_lyr, fields)
-    perimeter_pts = get_perimeter_pts(point_lyr, fields, wsp)
+    perimeter_pts = get_perimeter_pts(perim_lyr, perim_fields)
+    
+    
     transects = gen_transects(perimeter_pts)
+
+    for t in transects:
+        arcpy.AddMessage(str(t))
+        arcpy.AddMessage("---" + str(transects[t]))
     
     station_groups, node_groups = group_nodes_by_transect(tree, transects, tolerance)
     write_geometry(point_lyr, station_groups, 'stations', wsp)
