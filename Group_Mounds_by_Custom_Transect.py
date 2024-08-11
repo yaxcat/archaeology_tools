@@ -2,7 +2,7 @@ import arcpy
 import math
 import kd_tree
 
-
+# Prints each K-D tree's node point property in order
 def inOrderTraversal(rootNode):
     if not rootNode:
         return
@@ -10,7 +10,7 @@ def inOrderTraversal(rootNode):
     arcpy.AddMessage(str(rootNode.id) + " - " + str(rootNode.point))
     inOrderTraversal(rootNode.right_child)
 
-
+# Retrieves coordinates and ID from the point layers specified in the tool UI
 def get_pts(point_lyr, fields):
     point_list = []
     with arcpy.da.SearchCursor(point_lyr, fields) as cur:
@@ -20,7 +20,7 @@ def get_pts(point_lyr, fields):
             point_list.append([id, coords])
     return point_list
 
-
+# Constructs a K-D from a point layer to make nodes searchable by distance
 def pts_to_kd_tree(point_lyr, fields):
     desc = arcpy.Describe(points)
     if desc.shapeType not in ('Point', 'MultiPoint'):
@@ -30,39 +30,13 @@ def pts_to_kd_tree(point_lyr, fields):
     tree = kd_tree.build_tree(point_list)
     return tree
 
-
-# def get_perimeter_pts(point_lyr, fields, wsp):
-#     pt_lyr = arcpy.MakeFeatureLayer_management(points, 'points_layer')
-#     bounding_poly = arcpy.MinimumBoundingGeometry_management(pt_lyr, wsp + 'Prc_01_bounding_poly', 'CONVEX_HULL')
-#     selection = arcpy.SelectLayerByLocation_management(point_lyr, 'BOUNDARY_TOUCHES', bounding_poly)
-#     arcpy.ExportFeatures_conversion(selection, wsp + 'Prc_02_perimeter_points')
-
-#     perimeter_pts = get_pts(selection, fields)
-#     return perimeter_pts
-
+# Gets the user-specified points we'll use to build transects
 def get_perimeter_pts(perimeter_points, perim_fields):
     perimeter_pts = get_pts(perimeter_points, perim_fields)
     return perimeter_pts
 
-
-# # Maps two non-negative integers into a single non-negative integer.  Used to keep track of point
-# # pairs and prevent duplication of work
-# def cantor_pairing(oid1, oid2):
-#     if oid1 == oid2:
-#         arcpy.AddWarning("Two or more points have the same ID.  Point IDs must be unique to use this tool.")
-#         return
-#     # Make sure the pairwise function always consumes the IDs in the same order so that return value is
-#     # consistent.  For example (3,5) and (5,3) should both return 41.
-#     if oid1 < oid2:
-#         k1 = oid1
-#         k2 = oid2
-#     else:
-#         k1 = oid2
-#         k2 = oid1
-#     pair_id = (k1 + k2) * (k1 + k2 + 1)/2 + k2
-#     return int(pair_id)
-
-
+# Organizes user-specified perimeter points into pairs for building transects
+# TODO throw or warn of the number of points with the same ID != 2
 def gen_transects(perimeter_pts):
     pair_ids = set()
     transects = {}
@@ -75,16 +49,6 @@ def gen_transects(perimeter_pts):
             transects[pair_id] = [perimeter_pts[pt]]
         else:
             transects[pair_id].append(perimeter_pts[pt])
-
-    # for pt_1 in range(0, num_pts):
-    #     for pt_2 in range(pt_1+1, num_pts):
-    #         oid1 = perimeter_pts[pt_1][0]
-    #         oid2 = perimeter_pts[pt_2][0]
-    #         pair_id = cantor_pairing(oid1, oid2)
-    #         if pair_id not in pair_ids:
-    #             pair_ids.add(pair_id)
-    #             transects[transect_num] = [perimeter_pts[pt_1], perimeter_pts[pt_2]]
-    #         transect_num += 1
     return transects
 
 
@@ -109,7 +73,7 @@ def gen_station_points(start_pt, end_pt, spacing):
     station_points.append(end_pt)
     return station_points
 
-
+# Computes the distance between two points
 def get_distance(point_a, point_b):
     x1 = point_a[0]
     x2 = point_b[0]
@@ -118,7 +82,8 @@ def get_distance(point_a, point_b):
     line_len = math.sqrt((x2-x1)**2 + (y2-y1)**2)
     return line_len
 
-
+# Identifies the nearest K-D tree node to a given transect point and groups it with that transect if
+# its closer to the transect point than the tolerance specified in the tool UI
 def group_nodes_by_transect(tree, transects, tolerance):
     groups = set()
     point_groups = {}
@@ -135,23 +100,20 @@ def group_nodes_by_transect(tree, transects, tolerance):
         for station in t_stations:
             nn = kd_tree.nearest_neighbor(tree, station)
             dist = get_distance(station, nn.point)
-            #arcpy.AddMessage("---" + str(nn.point))
-            #arcpy.AddMessage("-----" + str(dist))
             if dist < tolerance:
-                #arcpy.AddMessage("T")
                 arcpy.AddMessage("---" + str(nn.point))
                 if id not in groups:
                     point_groups[id] = [nn.point]
                     groups.add(id)
                 else:
-                    #if point_groups[id][-1] != nn.point: # Possible to accidentally grab the same point more than once depending on the station density
-                    point_groups[id].append(nn.point)
+                    if point_groups[id][-1] != nn.point:
+                        point_groups[id].append(nn.point)
     arcpy.AddMessage(point_groups)
     return station_groups, point_groups
 
+# Converts the data structures generated into feature classes for viewing in ArcGIS Pro
+# TODO figure out why saving to GDB corrups the feature
 def write_geometry(point_lyr, point_groups, type, wsp):
-    #aprx = arcpy.mp.ArcGISProject("CURRENT")
-    #default_gdb = aprx.defaultGeodatabase
     spatial_ref = arcpy.Describe(point_lyr).spatialReference # Use the same CRS as the input points
     if type == 'neighbors':
         out_fc = arcpy.CreateFeatureclass_management(wsp, 'Res_01_point_groups', "POINT", "", "", "",  spatial_reference=spatial_ref)
